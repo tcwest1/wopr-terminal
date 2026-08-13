@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WOPR Terminal</title>
+<style>
+  :root{
+    --green:#6dff6d;
+    --green-dim:#2eb82e;
+    --green-soft:#9dff9d;
+    --black:#020402;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    min-height:100%;
+    overflow:hidden;
+    background:#000;
+    font-family:"Courier New", Courier, monospace;
+  }
+
+  body{
+    height:100dvh;
+  }
+  body{
+    color:var(--green);
+    background:
+      radial-gradient(circle at center, rgba(16,50,16,.22), rgba(0,0,0,.95) 70%),
+      #000;
+  }
+
+  .crt{
+    position:relative;
+    width:100%;
+    height:100dvh;
+    padding:clamp(18px,3vw,42px);
+    overflow:hidden;
+    background:
+      linear-gradient(rgba(18,16,16,0) 50%, rgba(0,0,0,.22) 50%),
+      linear-gradient(90deg, rgba(255,0,0,.018), rgba(0,255,0,.008), rgba(0,0,255,.018));
+    background-size:100% 4px, 6px 100%;
+  }
+  .crt::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 58%, rgba(0,0,0,.48) 100%);
+    z-index:3;
+  }
+  .crt::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:rgba(18,255,18,.025);
+    opacity:.55;
+    animation:flicker .12s infinite;
+    z-index:4;
+  }
+  @keyframes flicker{
+    0%{opacity:.46}
+    25%{opacity:.53}
+    50%{opacity:.48}
+    75%{opacity:.57}
+    100%{opacity:.50}
+  }
+
+  .screen{
+    position:relative;
+    z-index:2;
+    height:var(--app-height, 100dvh);
+    border:1px solid rgba(109,255,109,.12);
+    border-radius:16px;
+    padding:clamp(18px,3.5vw,44px);
+    overflow:hidden;
+    box-shadow:
+      inset 0 0 70px rgba(0,255,0,.08),
+      0 0 40px rgba(0,255,0,.05);
+  }
+  .topbar{
+    display:flex;
+    justify-content:space-between;
+    gap:18px;
+    align-items:flex-start;
+    margin-bottom:22px;
+    color:rgba(109,255,109,.78);
+    font-size:clamp(11px,1.2vw,15px);
+    letter-spacing:.12em;
+    text-transform:uppercase;
+  }
+  .status{
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+  .status span{
+    border:1px solid rgba(109,255,109,.24);
+    padding:4px 7px;
+  }
+  .terminal{
+    height:calc(100% - 70px);
+    overflow-y:auto;
+    padding-right:10px;
+    scrollbar-width:thin;
+    scrollbar-color:rgba(109,255,109,.45) transparent;
+  }
+  .terminal::-webkit-scrollbar{width:8px}
+  .terminal::-webkit-scrollbar-thumb{background:rgba(109,255,109,.32)}
+  #output{
+    white-space:pre-wrap;
+    word-break:break-word;
+    font-size:clamp(15px,2vw,27px);
+    line-height:1.38;
+    letter-spacing:.035em;
+    text-shadow:
+      0 0 3px rgba(109,255,109,.9),
+      0 0 12px rgba(109,255,109,.38);
+  }
+  .system{color:var(--green-soft)}
+  .dim{color:rgba(109,255,109,.55)}
+  .alert{
+    color:#b8ffb8;
+    text-shadow:0 0 5px #8aff8a, 0 0 18px rgba(109,255,109,.75);
+  }
+  .promptline{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:10px;
+    font-size:clamp(15px,2vw,27px);
+    text-shadow:0 0 3px rgba(109,255,109,.95),0 0 12px rgba(109,255,109,.35);
+  }
+  .promptmark{flex:0 0 auto}
+  #cmd{
+    flex:1;
+    min-width:0;
+    border:0;
+    outline:0;
+    background:transparent;
+    color:var(--green);
+    font:inherit;
+    caret-color:transparent;
+    text-transform:uppercase;
+    letter-spacing:.035em;
+    text-shadow:inherit;
+  }
+  .cursor{
+    display:inline-block;
+    width:.58em;
+    height:1.02em;
+    background:var(--green);
+    box-shadow:0 0 8px rgba(109,255,109,.8);
+    animation:blink .78s steps(1) infinite;
+    transform:translateY(.08em);
+    margin-left:0;
+    flex:0 0 auto;
+  }
+  @keyframes blink{50%{opacity:0}}
+
+  .controls{
+    position:absolute;
+    right:clamp(16px,2.5vw,34px);
+    bottom:clamp(14px,2.5vw,28px);
+    z-index:6;
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+  button{
+    appearance:none;
+    border:1px solid rgba(109,255,109,.42);
+    background:rgba(0,12,0,.74);
+    color:rgba(157,255,157,.9);
+    padding:8px 11px;
+    font-family:inherit;
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    cursor:pointer;
+    box-shadow:inset 0 0 12px rgba(0,255,0,.035);
+  }
+  button:hover,button:focus{background:rgba(0,30,0,.86);outline:none}
+  .boot-overlay{
+    position:absolute;
+    inset:0;
+    z-index:8;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#000;
+    color:var(--green);
+    text-align:center;
+    cursor:pointer;
+  }
+  .boot-card{
+    max-width:780px;
+    padding:30px;
+  }
+  .boot-title{
+    font-size:clamp(26px,5vw,72px);
+    letter-spacing:.14em;
+    text-shadow:0 0 10px rgba(109,255,109,.65);
+    margin-bottom:18px;
+  }
+  .boot-sub{
+    font-size:clamp(13px,1.5vw,18px);
+    line-height:1.6;
+    opacity:.75;
+  }
+  .boot-action{
+    margin-top:28px;
+    display:inline-block;
+    border:1px solid rgba(109,255,109,.45);
+    padding:12px 16px;
+    animation:bootPulse 1.3s infinite;
+  }
+  @keyframes bootPulse{50%{box-shadow:0 0 18px rgba(109,255,109,.22)}}
+
+  @media (max-width:700px){
+    .crt{padding:0}
+    .screen{border-radius:0;border:0;padding:18px 14px 78px}
+    .topbar{margin-bottom:14px}
+    .terminal{height:calc(100% - 58px)}
+    .controls{left:12px;right:12px;bottom:10px;justify-content:center}
+    button{flex:1 1 auto}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    .crt::after,.cursor,.boot-action{animation:none}
+  }
+@media (max-width:700px){
+    body.keyboard-open .controls{
+      display:none;
+    }
+
+    body.keyboard-open .screen{
+      padding-bottom:14px;
+    }
+
+    body.keyboard-open .terminal{
+      height:calc(100% - 52px);
+    }
+
+    body.keyboard-open .topbar{
+      margin-bottom:8px;
+    }
+
+    .promptline{
+      position:sticky;
+      bottom:0;
+      z-index:7;
+      padding:8px 0 6px;
+      background:linear-gradient(to bottom, rgba(0,0,0,.15), rgba(0,0,0,.96) 28%);
+    }
+
+    #cmd{
+      min-height:44px;
+      font-size:18px;
+    }
+
+    .cursor{
+      display:inline-block;
+    }
+  }
+
+
+  .chess-shell{
+    margin:14px 0 8px;
+    border:1px solid rgba(109,255,109,.28);
+    padding:10px;
+    background:rgba(0,10,0,.36);
+    box-shadow:inset 0 0 24px rgba(0,255,0,.035);
+  }
+  .chess-title{
+    margin-bottom:8px;
+    font-size:clamp(12px,1.4vw,16px);
+    color:var(--green-soft);
+    letter-spacing:.08em;
+  }
+  .chess-board{
+    display:grid;
+    grid-template-columns:repeat(8,minmax(28px,58px));
+    width:max-content;
+    max-width:100%;
+    border:1px solid rgba(109,255,109,.36);
+    user-select:none;
+    touch-action:manipulation;
+  }
+  .chess-square{
+    width:clamp(28px,8vw,58px);
+    aspect-ratio:1/1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:clamp(20px,5vw,39px);
+    line-height:1;
+    cursor:pointer;
+    color:var(--green);
+    text-shadow:0 0 7px rgba(109,255,109,.62);
+    border:0;
+    padding:0;
+    min-width:0;
+  }
+  .chess-square.light{background:rgba(109,255,109,.055)}
+  .chess-square.dark{background:rgba(0,0,0,.52)}
+  .chess-square.selected{
+    outline:2px solid rgba(157,255,157,.95);
+    outline-offset:-3px;
+    box-shadow:inset 0 0 16px rgba(109,255,109,.26);
+  }
+  .chess-square.legal::after{
+    content:"";
+    width:23%;
+    aspect-ratio:1/1;
+    border-radius:50%;
+    background:rgba(109,255,109,.5);
+    box-shadow:0 0 8px rgba(109,255,109,.45);
+    position:absolute;
+  }
+  .chess-square{position:relative}
+  .chess-piece{position:relative;z-index:2}
+  .chess-meta{
+    margin-top:8px;
+    font-size:clamp(11px,1.2vw,14px);
+    color:rgba(109,255,109,.72);
+    line-height:1.45;
+  }
+  @media (max-width:700px){
+    .chess-shell{
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+    .chess-board{
+      grid-template-columns:repeat(8,minmax(34px,11vw));
+    }
+    .chess-square{
+      width:min(11vw,48px);
+      font-size:min(8vw,34px);
+    }
+  }
+
+
+  .chess-last-move{
+    margin-top:9px;
+    padding-top:7px;
+    border-top:1px solid rgba(109,255,109,.18);
+    font-size:clamp(11px,1.25vw,15px);
+    color:var(--green-soft);
+    line-height:1.4;
+    min-height:1.4em;
+    text-shadow:0 0 5px rgba(109,255,109,.35);
+  }
+
+</style>
+</head>
+<body>
+<div class="crt">
+  <div class="screen">
+    <div class="topbar">
+      <div>STRATEGIC SYSTEMS TERMINAL // NODE 7</div>
+      <div class="status">
+        <span id="voiceStatus">VOICE: ON</span>
+        <span id="soundStatus">SFX: ON</span>
+      </div>
+    </div>
+
+    <div class="terminal" id="terminal">
+      <div id="output"></div>
+      <div class="promptline" id="promptline" style="display:none;">
+        <span class="promptmark">&gt;</span>
+        <span class="cursor" aria-hidden="true"></span>
+        <input id="cmd"
+               autocomplete="off"
+               autocapitalize="characters"
+               autocorrect="off"
+               spellcheck="false"
+               enterkeyhint="send"
+               inputmode="text"
+               aria-label="Terminal command" />
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="voiceBtn">Voice On</button>
+      <button id="soundBtn">SFX On</button>
+      <button id="locationBtn">Location Scan</button>
+      <button id="rebootBtn">Reboot</button>
+      <button id="fullscreenBtn">Fullscreen</button>
+    </div>
+
+    <div class="boot-overlay" id="bootOverlay">
+      <div class="boot-card">
+        <div class="boot-title">WOPR</div>
+        <div class="boot-sub">
+          REMOTE TERMINAL INTERFACE<br>
+          SYNTHETIC VOICE + PHOSPHOR DISPLAY<br><br>
+          Browser audio requires a user gesture before playback.
+        </div>
+        <div class="boot-action">CLICK / TAP TO CONNECT</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const output = document.getElementById('output');
+  const terminal = document.getElementById('terminal');
+  const promptLine = document.getElementById('promptline');
+  const cmd = document.getElementById('cmd');
+  const overlay = document.getElementById('bootOverlay');
+  const voiceBtn = document.getElementById('voiceBtn');
+  const soundBtn = document.getElementById('soundBtn');
+  const locationBtn = document.getElementById('locationBtn');
+  const rebootBtn = document.getElementById('rebootBtn');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const voiceStatus = document.getElementById('voiceStatus');
+  const soundStatus = document.getElementById('soundStatus');
+
+  let voiceEnabled = true;
+  let soundEnabled = true;
+  let busy = false;
+  let audioCtx = null;
+  let selectedVoice = null;
+  const history = [];
+  let historyIndex = 0;
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const scrollBottom = () => terminal.scrollTop = terminal.scrollHeight;
+
+  function initAudio(){
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function beep(freq=720, duration=.035, volume=.025, type='square'){
+    if (!soundEnabled) return;
+    try{
+      initAudio();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(.0001, audioCtx.currentTime + duration);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }catch(e){}
+  }
+
+  function terminalChirp(){
+    beep(430,.045,.025,'square');
+    setTimeout(()=>beep(690,.04,.018,'square'),45);
+  }
+
+  function loadVoices(){
+    const voices = speechSynthesis.getVoices();
+    if (!voices.length) return;
+    const english = voices.filter(v => /^en/i.test(v.lang));
+    const preferred = [
+      /microsoft david/i, /google uk english male/i, /daniel/i, /alex/i,
+      /male/i, /english.*united states/i
+    ];
+    selectedVoice = null;
+    for (const rx of preferred){
+      selectedVoice = english.find(v => rx.test(v.name));
+      if (selectedVoice) break;
+    }
+    selectedVoice = selectedVoice || english[0] || voices[0];
+  }
+  loadVoices();
+  if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = loadVoices;
+
+  function speak(text, opts={}){
+    if (!voiceEnabled || !('speechSynthesis' in window)) return Promise.resolve();
+    speechSynthesis.cancel();
+    return new Promise(resolve => {
+      const clean = text
+        .replace(/[_*#=>\[\]{}]/g,' ')
+        .replace(/\bWOPR\b/g,'Whopper')
+        .replace(/\bDEFCON\b/g,'Def con')
+        .replace(/\s+/g,' ')
+        .trim();
+      if (!clean) return resolve();
+
+      const u = new SpeechSynthesisUtterance(clean);
+      if (selectedVoice) u.voice = selectedVoice;
+      u.rate = opts.rate ?? 0.86;
+      u.pitch = opts.pitch ?? 0.58;
+      u.volume = opts.volume ?? 0.82;
+      u.onend = resolve;
+      u.onerror = resolve;
+      speechSynthesis.speak(u);
+    });
+  }
+
+  async function typeText(text, cls='', speed=16, speakIt=true){
+    busy = true;
+    promptLine.style.display='none';
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    output.appendChild(span);
+
+    if (speakIt) speak(text);
+    for (let i=0;i<text.length;i++){
+      span.textContent += text[i];
+      if (soundEnabled && text[i] !== ' ' && text[i] !== '\n' && Math.random() > .45) {
+        beep(900 + Math.random()*240, .012, .006, 'square');
+      }
+      scrollBottom();
+      let delay = speed;
+      if (/[.,:;!?]/.test(text[i])) delay += 28;
+      await sleep(delay + Math.random()*8);
+    }
+    output.appendChild(document.createTextNode('\n'));
+    scrollBottom();
+    busy = false;
+  }
+
+  async function line(text='', cls='', speed=14, pause=120, speakIt=true){
+    await typeText(text, cls, speed, speakIt);
+    if (pause) await sleep(pause);
+  }
+
+  function showPrompt(autoFocus=true){
+    promptLine.style.display='flex';
+    cmd.disabled=false;
+    cmd.value='';
+    scrollBottom();
+
+    const isMobile = window.matchMedia('(max-width:700px)').matches;
+    if (autoFocus && !isMobile) {
+      cmd.focus();
+    }
+  }
+
+  function hidePrompt(){
+    promptLine.style.display='none';
+    cmd.disabled=true;
+  }
+
+  async function bootSequence(){
+    speechSynthesis.cancel();
+    output.textContent='';
+    hidePrompt();
+    terminalChirp();
+    await sleep(220);
+    await line('ROM CHECK ................................ OK', 'dim', 9, 70, false);
+    await line('MEMORY BANK 0 ........................... OK', 'dim', 9, 70, false);
+    await line('MEMORY BANK 1 ........................... OK', 'dim', 9, 70, false);
+    await line('LOADING STRATEGIC SIMULATION CORE ........', 'dim', 9, 180, false);
+    await line('LINK ESTABLISHED: REMOTE TERMINAL 07', 'system', 12, 450, true);
+    await line('', '', 0, 100, false);
+    await line('GREETINGS PROFESSOR FALKEN.', 'alert', 25, 650, true);
+    await line('', '', 0, 100, false);
+    await line('SHALL WE PLAY A GAME?', 'alert', 28, 250, true);
+    await line('', '', 0, 0, false);
+    showPrompt(false);
+  }
+
+
+  function getBrowserLocation(){
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('GEOLOCATION NOT SUPPORTED BY THIS TERMINAL.'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy: pos.coords.accuracy
+        }),
+        err => {
+          const messages = {
+            1: 'LOCATION ACCESS DENIED BY OPERATOR.',
+            2: 'LOCATION SIGNAL UNAVAILABLE.',
+            3: 'LOCATION REQUEST TIMED OUT.'
+          };
+          reject(new Error(messages[err.code] || 'LOCATION FIX FAILED.'));
+        },
+        { enableHighAccuracy:true, timeout:12000, maximumAge:300000 }
+      );
+    });
+  }
+
+  function estimateCosmicRadiation(elevationM){
+    // Approximate terrestrial-background-independent cosmic component.
+    // Near sea level: ~0.033 µSv/h. It rises roughly exponentially with altitude.
+    const base = 0.033;
+    const scaleHeight = 1800;
+    const rate = base * Math.exp(Math.max(0, elevationM) / scaleHeight);
+    const annual = rate * 24 * 365 / 1000; // mSv/year
+    return { hourly:rate, annual };
+  }
+
+  function uvLabel(uv){
+    if (uv < 3) return 'LOW';
+    if (uv < 6) return 'MODERATE';
+    if (uv < 8) return 'HIGH';
+    if (uv < 11) return 'VERY HIGH';
+    return 'EXTREME';
+  }
+
+  async function runLocationScan(){
+    hidePrompt();
+
+    try{
+      terminalChirp();
+      await line('ACQUIRING GEOSPATIAL POSITION...', 'system', 16, 250, true);
+      await line('SCANNING LOCAL POSITION SERVICES...', 'dim', 9, 180, false);
+
+      const {lat, lon, accuracy} = await getBrowserLocation();
+
+      await line('SATELLITE FIX ESTABLISHED.', 'alert', 20, 320, true);
+      await line('', '', 0, 60, false);
+      await line(`LATITUDE ............. ${Math.abs(lat).toFixed(4)} ${lat >= 0 ? 'N' : 'S'}`, '', 10, 35, false);
+      await line(`LONGITUDE ............ ${Math.abs(lon).toFixed(4)} ${lon >= 0 ? 'E' : 'W'}`, '', 10, 35, false);
+      await line(`POSITION ACCURACY .... ±${Math.round(accuracy)} M`, '', 10, 180, false);
+      await line('', '', 0, 50, false);
+
+      await line('ACCESSING ENVIRONMENTAL NETWORK...', 'system', 15, 220, true);
+      await line('RETRIEVING ATMOSPHERIC DATA...', 'dim', 10, 120, false);
+
+      const url =
+        `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}` +
+        `&longitude=${encodeURIComponent(lon)}` +
+        `&current=temperature_2m,relative_humidity_2m` +
+        `&daily=uv_index_max` +
+        `&temperature_unit=fahrenheit` +
+        `&timezone=auto` +
+        `&forecast_days=1`;
+
+      const elevationUrl =
+        `https://api.open-meteo.com/v1/elevation?latitude=${encodeURIComponent(lat)}` +
+        `&longitude=${encodeURIComponent(lon)}`;
+
+      const [weatherResp, elevResp] = await Promise.all([
+        fetch(url, {cache:'no-store'}),
+        fetch(elevationUrl, {cache:'no-store'})
+      ]);
+
+      if (!weatherResp.ok || !elevResp.ok) throw new Error('REMOTE ENVIRONMENTAL DATA LINK FAILED.');
+
+      await line('ATMOSPHERIC DATA RECEIVED.', 'dim', 10, 120, false);
+      await line('CALCULATING ALTITUDE EXPOSURE...', 'system', 14, 220, true);
+
+      const weather = await weatherResp.json();
+      const elev = await elevResp.json();
+
+      const tempF = weather.current?.temperature_2m;
+      const humidity = weather.current?.relative_humidity_2m;
+      const uv = weather.daily?.uv_index_max?.[0];
+      const elevationM = Array.isArray(elev.elevation) ? elev.elevation[0] : elev.elevation;
+
+      if ([tempF, humidity, uv, elevationM].some(v => v === undefined || v === null || Number.isNaN(Number(v)))) {
+        throw new Error('INCOMPLETE ENVIRONMENTAL TELEMETRY RECEIVED.');
+      }
+
+      const elevationFt = Number(elevationM) * 3.28084;
+      const radiation = estimateCosmicRadiation(Number(elevationM));
+
+      await line('MODEL CALCULATION COMPLETE.', 'dim', 10, 220, false);
+      await line('', '', 0, 80, false);
+
+      terminalChirp();
+      await line('LOCAL ENVIRONMENTAL CONDITIONS', 'alert', 20, 250, true);
+      await line('========================================', 'dim', 5, 40, false);
+      await line(`ELEVATION ............ ${Math.round(elevationFt).toLocaleString()} FT`, '', 10, 35, false);
+      await line(`TEMPERATURE .......... ${Number(tempF).toFixed(1)} F`, '', 10, 35, false);
+      await line(`RELATIVE HUMIDITY .... ${Math.round(humidity)} %`, '', 10, 35, false);
+      await line(`UV INDEX ............. ${Number(uv).toFixed(1)} [${uvLabel(Number(uv))}]`, '', 10, 35, false);
+      await line(`COSMIC RADIATION ..... ${radiation.hourly.toFixed(3)} µSv/H`, '', 10, 35, false);
+      await line(`ANNUALIZED ESTIMATE .. ${radiation.annual.toFixed(2)} mSv/YR`, '', 10, 90, false);
+      await line('========================================', 'dim', 5, 80, false);
+
+      await line('ANALYSIS COMPLETE.', 'alert', 20, 250, true);
+      await line(
+        'RADIATION VALUE IS A MODEL-BASED COSMIC BACKGROUND ESTIMATE FROM ELEVATION.',
+        'dim', 8, 40, false
+      );
+      await line(
+        'IT IS NOT A GEIGER-COUNTER READING AND CANNOT DETECT LOCAL RADIOACTIVE SOURCES.',
+        'dim', 8, 40, false
+      );
+      await line('WEATHER / UV / ELEVATION DATA: OPEN-METEO.', 'dim', 8, 80, false);
+
+    }catch(err){
+      terminalChirp();
+      await line('LOCATION SCAN FAILED.', 'alert', 16, 160, true);
+      await line(err.message || 'UNKNOWN LOCATION ERROR.', 'dim', 10, 120, false);
+      await line('NOTE: GEOLOCATION GENERALLY REQUIRES HTTPS OR LOCALHOST.', 'dim', 8, 80, false);
+    }
+
+    await line('', '', 0, 0, false);
+    showPrompt();
+  }
+
+
+  const CHESS = (() => {
+    const PIECES = {
+      wK:'♔', wQ:'♕', wR:'♖', wB:'♗', wN:'♘', wP:'♙',
+      bK:'♚', bQ:'♛', bR:'♜', bB:'♝', bN:'♞', bP:'♟'
+    };
+    const FILES='abcdefgh';
+    let board=null, turn='w', selected=null, active=false, gameOver=false, lastMove='AWAITING FIRST MOVE...';
+    let enPassant=null;
+    let castling={wK:true,wQ:true,bK:true,bQ:true};
+
+    function initialBoard(){
+      return [
+        ['bR','bN','bB','bQ','bK','bB','bN','bR'],
+        ['bP','bP','bP','bP','bP','bP','bP','bP'],
+        [null,null,null,null,null,null,null,null],
+        [null,null,null,null,null,null,null,null],
+        [null,null,null,null,null,null,null,null],
+        [null,null,null,null,null,null,null,null],
+        ['wP','wP','wP','wP','wP','wP','wP','wP'],
+        ['wR','wN','wB','wQ','wK','wB','wN','wR']
+      ];
+    }
+    function cloneBoard(b){ return b.map(r=>r.slice()); }
+    function sqName(r,c){ return FILES[c] + (8-r); }
+    function parseSq(s){
+      s=(s||'').toLowerCase().trim();
+      if(!/^[a-h][1-8]$/.test(s)) return null;
+      return [8-Number(s[1]), FILES.indexOf(s[0])];
+    }
+    function colorOf(p){ return p ? p[0] : null; }
+    function typeOf(p){ return p ? p[1] : null; }
+    function inside(r,c){ return r>=0&&r<8&&c>=0&&c<8; }
+    function findKing(b,color){
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]===color+'K') return [r,c];
+      return null;
+    }
+    function attacksSquare(b, fromR, fromC, toR, toC){
+      const p=b[fromR][fromC]; if(!p) return false;
+      const color=colorOf(p), t=typeOf(p);
+      const dr=toR-fromR, dc=toC-fromC;
+      if(t==='P'){
+        const dir=color==='w'?-1:1;
+        return dr===dir && Math.abs(dc)===1;
+      }
+      if(t==='N') return (Math.abs(dr)===2&&Math.abs(dc)===1)||(Math.abs(dr)===1&&Math.abs(dc)===2);
+      if(t==='K') return Math.max(Math.abs(dr),Math.abs(dc))===1;
+      let stepR=0, stepC=0;
+      if(t==='B' && Math.abs(dr)===Math.abs(dc)){ stepR=Math.sign(dr); stepC=Math.sign(dc); }
+      else if(t==='R' && (dr===0||dc===0)){ stepR=Math.sign(dr); stepC=Math.sign(dc); }
+      else if(t==='Q' && (dr===0||dc===0||Math.abs(dr)===Math.abs(dc))){ stepR=Math.sign(dr); stepC=Math.sign(dc); }
+      else return false;
+      let r=fromR+stepR,c=fromC+stepC;
+      while(r!==toR||c!==toC){ if(b[r][c]) return false; r+=stepR;c+=stepC; }
+      return true;
+    }
+    function isSquareAttacked(b,r,c,byColor){
+      for(let rr=0;rr<8;rr++) for(let cc=0;cc<8;cc++){
+        if(colorOf(b[rr][cc])===byColor && attacksSquare(b,rr,cc,r,c)) return true;
+      }
+      return false;
+    }
+    function inCheck(b,color){
+      const k=findKing(b,color); if(!k) return true;
+      return isSquareAttacked(b,k[0],k[1],color==='w'?'b':'w');
+    }
+    function rawMovesFrom(b,r,c, ep=enPassant, castles=castling){
+      const p=b[r][c]; if(!p) return [];
+      const color=colorOf(p), t=typeOf(p), enemy=color==='w'?'b':'w', moves=[];
+      const add=(rr,cc,special=null)=>{
+        if(!inside(rr,cc)) return false;
+        const target=b[rr][cc];
+        if(!target){ moves.push({fr:r,fc:c,tr:rr,tc:cc,special}); return true; }
+        if(colorOf(target)===enemy) moves.push({fr:r,fc:c,tr:rr,tc:cc,special});
+        return false;
+      };
+      if(t==='P'){
+        const dir=color==='w'?-1:1, start=color==='w'?6:1, promo=color==='w'?0:7;
+        if(inside(r+dir,c)&&!b[r+dir][c]){
+          moves.push({fr:r,fc:c,tr:r+dir,tc:c,promote:(r+dir===promo)});
+          if(r===start&&!b[r+2*dir][c]) moves.push({fr:r,fc:c,tr:r+2*dir,tc:c,doublePawn:true});
+        }
+        for(const d of [-1,1]){
+          const rr=r+dir,cc=c+d;
+          if(inside(rr,cc)&&b[rr][cc]&&colorOf(b[rr][cc])===enemy)
+            moves.push({fr:r,fc:c,tr:rr,tc:cc,promote:(rr===promo)});
+          if(ep && ep[0]===rr && ep[1]===cc)
+            moves.push({fr:r,fc:c,tr:rr,tc:cc,enPassant:true});
+        }
+      } else if(t==='N'){
+        for(const [dr,dc] of [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]]) add(r+dr,c+dc);
+      } else if(t==='B'||t==='R'||t==='Q'){
+        const dirs=[];
+        if(t==='B'||t==='Q') dirs.push([1,1],[1,-1],[-1,1],[-1,-1]);
+        if(t==='R'||t==='Q') dirs.push([1,0],[-1,0],[0,1],[0,-1]);
+        for(const [dr,dc] of dirs){
+          let rr=r+dr,cc=c+dc;
+          while(inside(rr,cc)){
+            const empty=!b[rr][cc];
+            add(rr,cc);
+            if(!empty) break;
+            rr+=dr;cc+=dc;
+          }
+        }
+      } else if(t==='K'){
+        for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++) if(dr||dc) add(r+dr,c+dc);
+        if(color==='w'&&r===7&&c===4&&!inCheck(b,'w')){
+          if(castles.wK && !b[7][5]&&!b[7][6] && !isSquareAttacked(b,7,5,'b')&&!isSquareAttacked(b,7,6,'b') && b[7][7]==='wR')
+            moves.push({fr:r,fc:c,tr:7,tc:6,castle:'K'});
+          if(castles.wQ && !b[7][1]&&!b[7][2]&&!b[7][3] && !isSquareAttacked(b,7,3,'b')&&!isSquareAttacked(b,7,2,'b') && b[7][0]==='wR')
+            moves.push({fr:r,fc:c,tr:7,tc:2,castle:'Q'});
+        }
+        if(color==='b'&&r===0&&c===4&&!inCheck(b,'b')){
+          if(castles.bK && !b[0][5]&&!b[0][6] && !isSquareAttacked(b,0,5,'w')&&!isSquareAttacked(b,0,6,'w') && b[0][7]==='bR')
+            moves.push({fr:r,fc:c,tr:0,tc:6,castle:'K'});
+          if(castles.bQ && !b[0][1]&&!b[0][2]&&!b[0][3] && !isSquareAttacked(b,0,3,'w')&&!isSquareAttacked(b,0,2,'w') && b[0][0]==='bR')
+            moves.push({fr:r,fc:c,tr:0,tc:2,castle:'Q'});
+        }
+      }
+      return moves;
+    }
+    function applyToBoard(b,m){
+      const nb=cloneBoard(b), p=nb[m.fr][m.fc];
+      nb[m.fr][m.fc]=null;
+      if(m.enPassant){
+        const dir=colorOf(p)==='w'?1:-1;
+        nb[m.tr+dir][m.tc]=null;
+      }
+      nb[m.tr][m.tc]=m.promote ? colorOf(p)+'Q' : p;
+      if(m.castle==='K'){
+        nb[m.tr][5]=nb[m.tr][7]; nb[m.tr][7]=null;
+      } else if(m.castle==='Q'){
+        nb[m.tr][3]=nb[m.tr][0]; nb[m.tr][0]=null;
+      }
+      return nb;
+    }
+    function legalMovesFor(color){
+      const all=[];
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+        if(colorOf(board[r][c])!==color) continue;
+        for(const m of rawMovesFrom(board,r,c)){
+          const nb=applyToBoard(board,m);
+          if(!inCheck(nb,color)) all.push(m);
+        }
+      }
+      return all;
+    }
+    function legalFrom(r,c){
+      return legalMovesFor(turn).filter(m=>m.fr===r&&m.fc===c);
+    }
+    function updateRightsForMove(m,p,captured){
+      if(p==='wK'){castling.wK=false;castling.wQ=false}
+      if(p==='bK'){castling.bK=false;castling.bQ=false}
+      if(p==='wR'&&m.fr===7&&m.fc===0) castling.wQ=false;
+      if(p==='wR'&&m.fr===7&&m.fc===7) castling.wK=false;
+      if(p==='bR'&&m.fr===0&&m.fc===0) castling.bQ=false;
+      if(p==='bR'&&m.fr===0&&m.fc===7) castling.bK=false;
+      if(captured==='wR'&&m.tr===7&&m.tc===0) castling.wQ=false;
+      if(captured==='wR'&&m.tr===7&&m.tc===7) castling.wK=false;
+      if(captured==='bR'&&m.tr===0&&m.tc===0) castling.bQ=false;
+      if(captured==='bR'&&m.tr===0&&m.tc===7) castling.bK=false;
+    }
+    function commit(m){
+      const p=board[m.fr][m.fc], captured=board[m.tr][m.tc];
+      updateRightsForMove(m,p,captured);
+      board=applyToBoard(board,m);
+      enPassant = m.doublePawn ? [(m.fr+m.tr)/2,m.fc] : null;
+      turn=turn==='w'?'b':'w';
+      selected=null;
+    }
+    function evaluate(b){
+      const vals={P:100,N:320,B:330,R:500,Q:900,K:20000};
+      let s=0;
+      for(const row of b) for(const p of row) if(p) s+=(p[0]==='b'?1:-1)*vals[p[1]];
+      return s;
+    }
+    function computerMove(){
+      const moves=legalMovesFor('b');
+      if(!moves.length) return null;
+      let best=null,bestScore=-Infinity;
+      for(const m of moves){
+        const nb=applyToBoard(board,m);
+        let score=evaluate(nb);
+        const cap=board[m.tr][m.tc];
+        if(cap) score+=({P:12,N:26,B:26,R:45,Q:80,K:1000}[cap[1]]||0);
+        if(m.promote) score+=80;
+        score+=Math.random()*18;
+        if(score>bestScore){bestScore=score;best=m}
+      }
+      return best;
+    }
+    function describe(m,pBefore,captured){
+      const pieceNames={K:'KING',Q:'QUEEN',R:'ROOK',B:'BISHOP',N:'KNIGHT',P:'PAWN'};
+      if(m.castle) return m.castle==='K'?'CASTLES KING SIDE':'CASTLES QUEEN SIDE';
+      return `${pieceNames[pBefore[1]]} ${sqName(m.fr,m.fc)} TO ${sqName(m.tr,m.tc)}${captured?' CAPTURES '+pieceNames[captured[1]]:''}${m.promote?' PROMOTES TO QUEEN':''}`;
+    }
+    function render(){
+      let shell=document.getElementById('chessShell');
+      if(!shell){
+        shell=document.createElement('div'); shell.id='chessShell'; shell.className='chess-shell';
+        output.appendChild(shell);
+      }
+      shell.innerHTML='';
+      const title=document.createElement('div'); title.className='chess-title';
+      title.textContent=`CHESS // ${gameOver?'GAME OVER':(turn==='w'?'YOUR MOVE':'WOPR THINKING')}`;
+      shell.appendChild(title);
+      const grid=document.createElement('div'); grid.className='chess-board';
+      const legalSel=selected?legalFrom(selected[0],selected[1]):[];
+      for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+        const b=document.createElement('button');
+        b.type='button';
+        b.className='chess-square '+(((r+c)%2)?'dark':'light');
+        if(selected&&selected[0]===r&&selected[1]===c) b.classList.add('selected');
+        if(legalSel.some(m=>m.tr===r&&m.tc===c)) b.classList.add('legal');
+        b.dataset.r=r; b.dataset.c=c;
+        b.setAttribute('aria-label',sqName(r,c)+(board[r][c]?' '+board[r][c]:' empty'));
+        const span=document.createElement('span'); span.className='chess-piece';
+        span.textContent=board[r][c]?PIECES[board[r][c]]:'';
+        b.appendChild(span);
+        b.addEventListener('click',()=>clickSquare(r,c));
+        grid.appendChild(b);
+      }
+      shell.appendChild(grid);
+
+      const last=document.createElement('div');
+      last.className='chess-last-move';
+      last.textContent='LAST MOVE // ' + lastMove;
+      shell.appendChild(last);
+
+      const meta=document.createElement('div'); meta.className='chess-meta';
+      meta.textContent='YOU ARE WHITE. TAP A PIECE, THEN A DESTINATION — OR TYPE A MOVE LIKE E2E4. TYPE EXIT CHESS TO LEAVE.';
+      shell.appendChild(meta);
+      scrollBottom();
+    }
+    async function postMoveStatus(){
+      const moves=legalMovesFor(turn);
+      if(!moves.length){
+        gameOver=true; render();
+        if(inCheck(board,turn)){
+          const winner=turn==='w'?'WOPR':'YOU';
+          await line(`CHECKMATE. ${winner} WIN${winner==='YOU'?'':'S'}.`,'alert',18,220,true);
+        }else{
+          await line('STALEMATE. NO WINNING MOVE REMAINS.','alert',18,220,true);
+        }
+        return false;
+      }
+      if(inCheck(board,turn)) await line('CHECK.','alert',18,100,true);
+      return true;
+    }
+    async function doHumanMove(m){
+      if(gameOver||turn!=='w') return;
+      const p=board[m.fr][m.fc], captured=board[m.tr][m.tc];
+      const humanDesc=describe(m,p,captured);
+      commit(m);
+      lastMove='YOU: ' + humanDesc;
+      render();
+      terminalChirp();
+
+      if(!(await postMoveStatus())) return;
+
+      await sleep(280);
+      const cm=computerMove();
+      if(!cm) return;
+
+      const cp=board[cm.fr][cm.fc], cc=board[cm.tr][cm.tc];
+      const computerDesc=describe(cm,cp,cc);
+      commit(cm);
+      lastMove='WOPR: ' + computerDesc;
+      render();
+      terminalChirp();
+
+      if(voiceEnabled) speak('WOPR. ' + computerDesc);
+      await postMoveStatus();
+      render();
+
+      if(!gameOver) showPrompt(false);
+    }
+    async function clickSquare(r,c){
+      if(!active||gameOver||turn!=='w'||busy) return;
+      const p=board[r][c];
+      if(!selected){
+        if(colorOf(p)==='w'){selected=[r,c]; render();}
+        return;
+      }
+      if(colorOf(p)==='w'){selected=[r,c]; render(); return;}
+      const m=legalFrom(selected[0],selected[1]).find(x=>x.tr===r&&x.tc===c);
+      if(m) await doHumanMove(m);
+      else {selected=null; render();}
+    }
+    async function start(){
+      board=initialBoard(); turn='w'; selected=null; active=true; gameOver=false; lastMove='AWAITING FIRST MOVE...'; enPassant=null;
+      castling={wK:true,wQ:true,bK:true,bQ:true};
+      await line('CHESS MODULE LOADED.','system',12,170,true);
+      await line('YOU ARE WHITE. MAKE THE FIRST MOVE.','alert',18,150,true);
+      render();
+      showPrompt(false);
+    }
+    async function handleText(input){
+      const t=input.trim().toUpperCase();
+      if(/^EXIT(\s+CHESS)?$/.test(t)||t==='QUIT'){
+        active=false; gameOver=false; selected=null;
+        const shell=document.getElementById('chessShell'); if(shell) shell.remove();
+        await line('CHESS MODULE TERMINATED.','system',12,100,true);
+        return true;
+      }
+      if(t==='BOARD'){render();return true;}
+      const clean=t.replace(/[^A-H1-8]/g,'');
+      if(/^[A-H][1-8][A-H][1-8]$/.test(clean)){
+        if(turn!=='w'){ await line('WAITING FOR WOPR MOVE.','dim',10,80,false); return true; }
+        const a=parseSq(clean.slice(0,2)), b=parseSq(clean.slice(2,4));
+        const m=legalMovesFor('w').find(x=>x.fr===a[0]&&x.fc===a[1]&&x.tr===b[0]&&x.tc===b[1]);
+        if(!m){await line('ILLEGAL MOVE.','alert',13,100,true);return true;}
+        await doHumanMove(m); return true;
+      }
+      await line('CHESS INPUT: USE E2E4, TAP THE BOARD, BOARD, OR EXIT CHESS.','dim',9,80,false);
+      return true;
+    }
+    return {
+      start,
+      handleText,
+      isActive:()=>active
+    };
+  })();
+
+  const commands = {
+    HELP: async () => {
+      await line('AVAILABLE COMMANDS:', 'system', 12, 120, true);
+      await line('  GAMES    - LIST STRATEGIC SIMULATIONS', '', 8, 40, false);
+      await line('  STATUS   - DISPLAY SYSTEM STATUS', '', 8, 40, false);
+      await line('  LOCATION - SCAN LOCAL ENVIRONMENT', '', 8, 40, false);
+      await line('  CHESS    - PLAY CHESS AGAINST WOPR', '', 8, 40, false);
+      await line('  TRACE    - RUN COMMUNICATION TRACE', '', 8, 40, false);
+      await line('  HELLO    - OPEN DIALOGUE CHANNEL', '', 8, 40, false);
+      await line('  CLEAR    - CLEAR TERMINAL', '', 8, 40, false);
+      await line('  REBOOT   - RESTART SYSTEM', '', 8, 40, false);
+      await line('  HELP     - SHOW THIS LIST', '', 8, 100, false);
+    },
+    GAMES: async () => {
+      await line('LIST GAMES', 'system', 10, 160, true);
+      const games = [
+        'FALKEN\'S MAZE',
+        'BLACK JACK',
+        'GIN RUMMY',
+        'HEARTS',
+        'BRIDGE',
+        'CHECKERS',
+        'CHESS',
+        'POKER',
+        'FIGHTER COMBAT',
+        'GUERRILLA ENGAGEMENT',
+        'DESERT WARFARE',
+        'AIR-TO-GROUND ACTIONS',
+        'THEATERWIDE TACTICAL WARFARE',
+        'GLOBAL THERMONUCLEAR WAR'
+      ];
+      for (const g of games) await line('  ' + g, '', 7, 24, false);
+      await sleep(200);
+      await line('WOULD YOU LIKE TO PLAY A NICE GAME OF CHESS?', 'alert', 22, 200, true);
+    },
+    LOCATION: async () => runLocationScan(),
+    SCAN: async () => runLocationScan(),
+    STATUS: async () => {
+      await line('SYSTEM STATUS REPORT', 'system', 12, 120, true);
+      await line('PROCESSOR ARRAY ............ ONLINE', '', 8, 30, false);
+      await line('VOICE SYNTHESIS ............ ' + (voiceEnabled ? 'ONLINE' : 'MUTED'), '', 8, 30, false);
+      await line('AUDIO CHANNEL .............. ' + (soundEnabled ? 'ONLINE' : 'MUTED'), '', 8, 30, false);
+      await line('REMOTE LINK ................ STABLE', '', 8, 30, false);
+      await line('DEFCON SIMULATOR ........... STANDBY', '', 8, 100, false);
+    },
+    TRACE: async () => {
+      await line('INITIATING SIGNAL TRACE...', 'system', 14, 150, true);
+      const hops = [
+        'HOP 01  ALBUQUERQUE, NM     12 MS',
+        'HOP 02  CHEYENNE MOUNTAIN    28 MS',
+        'HOP 03  NORAD RELAY          41 MS',
+        'HOP 04  UNKNOWN NODE         --',
+      ];
+      for (const h of hops) await line(h, 'dim', 8, 220, false);
+      await line('TRACE TERMINATED BY REMOTE HOST.', 'alert', 15, 160, true);
+    },
+    HELLO: async () => {
+      await line('HELLO.', 'alert', 26, 400, true);
+      await line('HOW ARE YOU FEELING TODAY?', 'alert', 22, 180, true);
+    },
+    CLEAR: async () => {
+      output.textContent='';
+      await line('TERMINAL CLEARED.', 'dim', 10, 80, false);
+    },
+    REBOOT: async () => bootSequence(),
+    CHESS: async () => CHESS.start()
+  };
+
+  async function unknown(input){
+    if (/GLOBAL|THERMONUCLEAR|WAR/i.test(input)){
+      await line('SIMULATION ACCESS RESTRICTED.', 'alert', 18, 320, true);
+      await line('PERHAPS A NICE GAME OF CHESS?', 'alert', 22, 150, true);
+      return;
+    }
+    if (/YES|YEAH|SURE|OK/i.test(input)){
+      await line('EXCELLENT.', 'system', 18, 260, true);
+      await line('TYPE GAMES TO VIEW AVAILABLE SIMULATIONS.', '', 16, 120, true);
+      return;
+    }
+    if (/NO|NOPE/i.test(input)){
+      await line('CURIOUS.', 'system', 18, 300, true);
+      await line('WHY NOT?', '', 20, 120, true);
+      return;
+    }
+    if (/WHO ARE YOU|WHAT ARE YOU/i.test(input)){
+      await line('I AM A STRATEGIC SIMULATION PROCESSOR.', 'system', 18, 250, true);
+      await line('YOU MAY CALL ME WOPR.', 'alert', 22, 120, true);
+      return;
+    }
+    await line('INPUT NOT RECOGNIZED.', 'dim', 13, 120, true);
+    await line('TYPE HELP FOR AVAILABLE COMMANDS.', '', 10, 100, false);
+  }
+
+  async function handleCommand(raw){
+    if (busy) return;
+    const input = raw.trim();
+    if (!input) return;
+    history.push(input);
+    historyIndex = history.length;
+
+    hidePrompt();
+    const key = input.toUpperCase();
+    const inChess = CHESS.isActive() && key !== 'CHESS';
+
+    if (!inChess) {
+      output.appendChild(document.createTextNode('> ' + input.toUpperCase() + '\n'));
+      scrollBottom();
+    }
+
+    beep(520,.05,.02,'square');
+    await sleep(120);
+
+    if (inChess) {
+      await CHESS.handleText(input);
+    } else if (commands[key]) {
+      await commands[key]();
+    } else {
+      await unknown(input);
+    }
+
+    if (key !== 'REBOOT' && !CHESS.isActive()) {
+      await line('', '', 0, 0, false);
+      showPrompt(false);
+    }
+  }
+
+
+  function submitCurrentCommand(){
+    const value = cmd.value;
+    if (!value.trim() || busy) return;
+    handleCommand(value);
+  }
+cmd.addEventListener('focus', () => {
+    if (window.matchMedia('(max-width:700px)').matches) {
+      document.body.classList.add('keyboard-open');
+      setTimeout(scrollBottom, 120);
+    }
+  });
+
+  cmd.addEventListener('blur', () => {
+    document.body.classList.remove('keyboard-open');
+  });
+
+  function updateViewportHeight(){
+    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', `${h}px`);
+
+    if (window.visualViewport) {
+      const keyboardLikelyOpen = window.innerHeight - window.visualViewport.height > 140;
+      document.body.classList.toggle('keyboard-open', keyboardLikelyOpen && document.activeElement === cmd);
+    }
+
+    setTimeout(scrollBottom, 30);
+  }
+
+  updateViewportHeight();
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateViewportHeight);
+    window.visualViewport.addEventListener('scroll', updateViewportHeight);
+  } else {
+    window.addEventListener('resize', updateViewportHeight);
+  }
+
+  cmd.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submitCurrentCommand();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!history.length) return;
+      historyIndex = Math.max(0, historyIndex - 1);
+      cmd.value = history[historyIndex] || '';
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      historyIndex = Math.min(history.length, historyIndex + 1);
+      cmd.value = history[historyIndex] || '';
+    } else if (soundEnabled && e.key.length === 1) {
+      beep(1080 + Math.random()*180,.018,.008,'square');
+    }
+  });
+
+  overlay.addEventListener('click', async () => {
+    initAudio();
+    overlay.style.display='none';
+    await bootSequence();
+  });
+
+  voiceBtn.addEventListener('click', () => {
+    voiceEnabled = !voiceEnabled;
+    voiceBtn.textContent = voiceEnabled ? 'Voice On' : 'Voice Off';
+    voiceStatus.textContent = 'VOICE: ' + (voiceEnabled ? 'ON' : 'OFF');
+    if (!voiceEnabled && 'speechSynthesis' in window) speechSynthesis.cancel();
+    cmd.focus();
+  });
+
+  soundBtn.addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    soundBtn.textContent = soundEnabled ? 'SFX On' : 'SFX Off';
+    soundStatus.textContent = 'SFX: ' + (soundEnabled ? 'ON' : 'OFF');
+    if (soundEnabled) beep(700,.04,.02,'square');
+    cmd.focus();
+  });
+
+  locationBtn.addEventListener('click', async () => {
+    initAudio();
+    if (!busy) await runLocationScan();
+  });
+
+  rebootBtn.addEventListener('click', async () => {
+    initAudio();
+    await bootSequence();
+  });
+
+  fullscreenBtn.addEventListener('click', async () => {
+    try{
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    }catch(e){}
+    cmd.focus();
+  });
+
+  document.addEventListener('click', e => {
+    const isMobile = window.matchMedia('(max-width:700px)').matches;
+    if (!overlay.contains(e.target) && !e.target.closest('button') && !busy && !isMobile) {
+      cmd.focus();
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+  });
+})();
+</script>
+</body>
+</html>
